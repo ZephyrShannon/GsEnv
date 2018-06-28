@@ -1,0 +1,326 @@
+package com.gftchina.common.persistence.policyTree;
+import "common.proto";
+
+// ------------------------------
+// State variable table and action space table
+// ------------------------------
+
+//enum ParaValueType{
+//	gid_value = 1;
+//	str_value = 2;
+//	integer_value = 3;
+//	double_value = 4;
+//	reuslt_table = 5;
+//    is_null =6;
+//}
+
+message OneValue{
+	oneof V {
+		string gid = 1;
+		string str = 2;
+		int64 l = 3;
+		double d = 4;
+		RunResultTable resultTable = 5;
+		int64 date = 6;
+		int64 dateTime = 7;
+        bool isNull = 9;
+	}
+	optional common.NodeInfo clientCache = 8;
+}
+
+message MultiValue{
+	repeated OneValue vals = 1;
+}
+
+message Row {
+	repeated OneValue cells = 1;
+}
+
+message StateVariableColumn {
+	required string stateVariable = 1; // state variable name or gid
+	repeated OneValue cells = 3;
+	optional bool isShared = 4 [default = false];
+	optional int64 version = 5[default=0]; //system m time in millisecond
+}
+
+message StateVariableTable {
+	repeated StateVariableColumn columns = 1;
+}
+
+message RunResultRow {
+	// if not filled, it means the skill doesn't use parameters in SVT
+	// when use for join, if not filled, the rows will be joined to all original rows
+	repeated int32 svtRowIndices = 1;
+	// In order to keep the row sequence returned by skill,
+	// if multiple rows share same svtRowIndices, use two ActionSpaceRow records
+	required Row row = 2;
+}
+
+message RunResultTable {
+	repeated common.ColumnDef colDefines = 1; // column header of new columns
+	// All the property values will be filled instead of a node / edge id with a property name
+	repeated RunResultRow rows = 2;
+	required string fromActionLinkGid = 3;
+}
+
+// ------------------------------
+// Policy Tree
+// ------------------------------
+message ActionCommon {
+	required common.NodeInfo actionInstance = 1; // not the link node
+	required string linkNodeGid = 2; // link node in policy define, uniquely mark the action step in policy define.
+	repeated string precedingActions = 3; // gid of link node having pass val or finish2Ready edge connect to this link node
+	repeated string succeedingActions = 4; // gid of link node having pass val or finish2Ready edge connect from this link node
+	// required bool isShared = 5; Martin 2018-05-16 share concept becomes per agent link, and is moved out of the scope of policy tree
+	optional bool inCurrentSelectedPath = 6;
+	optional string role = 7;
+}
+
+message ActionPara {
+	oneof V {
+		string stateVariable = 1; // the variable value comes from a state variable
+		MultiValue values = 2;
+	}
+}
+
+enum ActionExecType {
+	Skill = 1;
+	Task = 2;
+	ServerFunction = 3;
+	ClientFunction = 4;
+}
+
+message RunAction {
+	optional ActionCommon common = 1; // 服务端应答需要填,客户端请求选填(填入表示修改)
+	required string actionDefine = 2; // gid of skill / function / task define
+	required ActionExecType actionExecType = 3;
+
+    message Para {
+		required string name = 1;
+		optional ActionPara paras = 2;
+	}
+	repeated Para actionParas = 4;
+	// Run是按SVT的行依次调用还是一次传递所有行的cell调用一次
+	// 一次传递所有的行的时候，在产生的图中的nodes要保持行的顺序，
+	// 因为具体执行的skill或function或task不一定要对参数做笛卡尔积，而是需要这个对应关系。
+	required bool runByRow = 5;
+}
+
+message SelectCondition {
+	message ColumnSort {
+		required string colName = 1;
+		required bool isAsc = 2;
+	}
+
+	message MatchRowIndices {
+		message Slice {
+			// 0 means the first row, -1 means the last row, -5 means the reverted 5th row.
+			// both start row and end row are inclusive
+			optional int32 startRow = 1 [default = 0];
+			optional int32 endRow = 2 [default = -1];
+		}
+		repeated Slice slices = 1;
+	}
+
+	message MatchColumnVal {
+		required string columnName = 1;
+		optional ActionPara matchedValue = 2; // 如果是state variable，只能有一个，如果是绝对值，可以有多个.
+	}
+
+	message Selection {
+		oneof sel {
+			MatchRowIndices matchedRowIndices = 1;
+			MatchColumnVal matchColumnVal = 2;
+			bool passFilterIfEmpty = 3; // if present, it should always be true
+		}
+	}
+
+	repeated ColumnSort colSorts = 1;
+	optional Selection selection = 2; // if not present, the selection need to be done by human
+}
+
+message ColInTab{
+	required string stateVariableOfTab = 1;
+	required string colName = 2;
+}
+
+message SelectAction {
+	optional ActionCommon common = 1; // 服务端应答需要填,客户端请求选填(填入表示修改)
+	// state variable of run action's writeResultTo field. if not present, it's from a state variable representing last run result.
+	optional string runResultFrom = 2;
+	optional SelectCondition selectCondition = 3;
+
+	message Output {
+		// action space的列的名字；或者某个state variable的gid，表示将该state variable中 和所选结果对应的行的cells 组成的一列
+		oneof from {
+			string runResultTableColumn = 1;
+			ActionPara values = 2;
+		}
+
+		// 结果写入的state variable的 gid
+		required string writeToStateVariable = 4;
+		// if true, append new rows in state variable table, instead of try to upsert.
+		// when appending, cells of appended new rows are filled with empty if no new value specified.
+		required bool isAppendingRow = 5;
+	}
+	repeated Output outputs = 4;
+}
+
+message GiveUpTurnAction {
+	optional ActionCommon common = 1; // 服务端应答需要填,客户端请求选填(填入表示修改)
+}
+
+message Wait4TurnAction {
+	optional ActionCommon common = 1; // 服务端应答需要填,客户端请求选填(填入表示修改)
+}
+
+message PolicyTree {
+	repeated RunAction runActions = 1;
+	repeated SelectAction selectActions = 2;
+	repeated string stateVariables = 3; // all the state variables used in this policy tree
+	repeated string policyVariables = 4;
+	repeated string errorsDuringLoad = 5;
+}
+
+message PolicyTreeStatusChanges {
+	message ChangePerAction {
+		required string actionGid = 1;
+		optional bool hasShortcutCreated = 3;
+	}
+
+	repeated ChangePerAction changes = 1;
+	optional StateVariableTable svt = 4;
+}
+
+message Action{
+	oneof V {
+		RunAction runAction = 1;
+		SelectAction selectAction = 2;
+	}
+}
+
+message TaskActionSpace{
+	repeated Action actions = 1;
+}
+
+
+message ActionSpaceTree {
+	required Action node = 1;
+	required ActionShareOptions shareOpt = 2;
+	repeated ActionSpaceTree children = 3;
+}
+
+message SharedActionSpace {
+	message Entry {
+		required string triggeringVariable = 1;
+		required OneValue val = 2;
+		//select by triggeringVariable & val, 查询所有的
+		required string sourceTask = 3;
+
+		//primary key is triggeringVariable + val + sourceTask, so you can merge shared action spaces from differnt tasks.
+		repeated ActionSpaceTree tree = 4;
+		required int64 ver = 5;
+	}
+	repeated Entry trees = 1;
+	optional string fromGroup = 2;
+    optional string episodeId = 3;
+	repeated common.NodeInfo nodeCaches =  4;
+}
+
+message ActionShareOptions {
+    required string actionLinkNodeGid = 1;
+	required bool shared4Run = 2; // true for shared for run, false for shared for read.
+	// For select action only: slice 的参数值不取Action中的内容，由 run action 的时候进行调整。最多选择多少条，由 Policy Action 中的定义决定
+	optional bool changeSlice4Select = 3;
+	// for run action only: 哪些参数是允许修改，不区分必填和非必填参数，Policy里面可以提供这些参数的缺省值
+	repeated string revisibleParameters = 4;
+}
+
+message PolicyShareInfo {
+    optional string agentLinkGid = 1;
+    repeated ActionShareOptions actionShareOptions = 2;
+}
+
+// ------------------------------
+// Request & Response
+// ------------------------------
+message OpenPolicyTreeRequest {
+	required string taskInstGid = 1;
+	optional string agentLinkGid = 2; // load PolicyShareInfo for this agent link
+	required bool getBuilderUI = 3 [default = false];
+	required bool loadPolicyTree = 4; // if true, load PolicyTree for policy tree, false for skip the loading
+}
+
+message OpenPolicyTreeResponse {
+	required string policyDefGid = 3;
+	optional PolicyTree policyTree = 1;
+	optional PolicyBuilderUI builderUI = 2;
+	optional PolicyShareInfo shareInfo = 4;
+}
+
+message StateVariableUpsertRequest {
+	required string actionGid = 1;
+	repeated int32 rowsSelectedInActionSpaceTable = 2;
+}
+
+message StateVariableUpsertResponse {
+	required string actionGid = 1;
+	required PolicyTreeStatusChanges policyTreeStatusChanges = 2;
+}
+
+message SVTRunRequest {
+	required string actionGid = 1;
+	// Skill is supposed to be run once for each row. Client side has skill instance result cache.
+	// For those rows whose result already found in client cache, no need to run them in server again.
+	// If this field is not filled, then it means run for all rows
+	// repeated int32 rowsToRunSkill = 2;
+}
+
+message SVTRunResponse {
+	required string actionGid = 1;
+	required RunResultTable runResultTable = 2;
+	required PolicyTreeStatusChanges policyTreeStatusChanges = 3;
+}
+
+message PolicyTreeUpsertActionRequest { // 
+	required string policyDef = 1;
+	required string taskInst = 2;
+	optional string precedingAction = 3;
+	required string newActionInstGid = 4;
+	required string agentLink = 5;
+	optional string replaceOldLink = 6;
+}
+
+message PolicyTreeUpsertActionResponse {
+	required Action action = 1;
+	required common.NodeInfo actionInstLinkNode = 2;
+}
+
+message PolicyActionUIInst {
+	optional string linkNodeGid = 1; // empty - editing, not generate
+	optional string precedingAction = 2;
+	optional string actionUIInstGid = 3;
+	required string serializationData = 4; 
+}
+
+message PolicyTreeUpsertActionUIInstRequest {
+	required string policyDef = 1;
+	required PolicyActionUIInst actionUIInst = 2;	
+}
+
+message PolicyTreeUpsertActionUIInstResponse {
+	required string actionUIInstGid = 1;
+}
+
+message PolicyBuilderUI {
+	required string policyDef = 1;
+	required common.NodeInfo builderUIInst = 2;
+	repeated PolicyActionUIInst	actionUIInsts = 3;
+}
+
+message RunPolicyTreeRequest {
+	required string policyDef = 1;
+	required string agentLinkGid = 2;
+	required string taskGid = 3;
+	optional string breakPointActionInstLinkGid = 4;
+}

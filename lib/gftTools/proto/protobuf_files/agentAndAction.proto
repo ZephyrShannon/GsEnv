@@ -1,0 +1,252 @@
+package com.gftchina.common.persistence.agentAndAction;
+
+import "common.proto";
+import "policyTree.proto";
+
+message Graph{
+    repeated string nodeGids = 1;
+    repeated string edgeGids = 2;
+}
+
+
+message AgentLink2GroupPair{
+    required common.NodeInfo agentLink = 1;
+    required common.NodeInfo group = 2;
+}
+
+message ActionFilterOpr {
+    required string filterFQInst = 1;
+    optional bool isAdd = 2;    //false means is remove
+    required string agentLinkGid = 3;
+    required string uiGid = 4;
+    required string groupGid=5;
+}
+
+
+message ActionLog{
+    optional string id = 1;      //server will set this.  mongoDB id
+    required policyTree.Action action = 2;
+    optional string group = 3;  //set by server when returning group historys
+    optional string agentLink = 4;  //same as above
+    optional int64 time = 5; //same
+    repeated string triggerFilterInsts = 6;
+    optional string taskGid = 7;
+    optional string policyGid = 8;
+    optional bool isSuccess = 9;
+    optional int64 reward = 10;
+    optional string error = 11;
+    optional int64 version = 12;
+    optional string roleGid = 13;
+    optional int64 qcost = 14;
+    optional int32 rowIndex = 16; //如果state是多行的情况下，同一个actionLink会对应多条actionLog
+    repeated policyTree.StateVariableColumn initStates = 17; //for select action, and it empty for now, you can generate this by select action.
+    optional bool isClientChoice = 18;
+    optional policyTree.RunResultTable runResult = 19; //one result.
+    optional string transId = 20;
+    optional policyTree.StateVariableColumn updatedStates = 21;
+}
+
+message StepMsg{
+    repeated string actionLogId = 1;
+}
+
+//message TaskTransactionMsg{
+//    required string docId = 1;
+//    optional int64 ctime = 2;
+//    optional string usr = 3;
+//    optional string groupGid = 4;
+//    optional string agentLink = 6;
+//    optional string task = 7;
+//    optional string policyGid = 8;
+//    optional bytes policyData = 9;
+//    repeated policyTree.StateVariableColumn initStates = 10;
+//    optional bool isRestart = 11;
+//    optional int64 totalReward = 12;
+//    repeated StepMsg allSteps = 13;
+//    repeated string actionLogs = 14;
+//    optional int32 state = 15;
+//    optional string episodeId = 16;
+//}
+
+enum PolicyExecutionState{
+    en_policy_triggered = 7;
+    en_policy_started = 1;
+    en_policy_continue = 2;
+    en_policy_paused = 3;
+    en_policy_end = 4;
+    en_policy_canceled = 5;
+    en_policy_replace_and_canceled = 6;
+}
+
+//client will
+message UpdateVarAndSaveLog{
+    optional string group = 1;  // may or may not give
+    optional string agentLink = 2;
+    repeated policyTree.StateVariableColumn agentLinkVars = 3;
+//    optional ActionLog logs = 4;
+    optional int64 time = 5; //set by server on broadcasting.
+    optional string forTaskGid = 6;
+    optional string fromTaskGid = 7;
+    optional int64 version = 8;
+    repeated ActionLog actions = 9;
+    optional string policyGid = 10;
+    repeated string filterGids = 11;
+//    optional bool exeuteActions = 12; //no longer used.
+    optional string clientReqID = 13;
+    optional PolicyExecutionState policyState = 14;
+}
+
+message UpdateStateVars{
+    required string agentLink = 1;  //
+    optional string taskGid = 2;
+    optional string policyGid = 3;
+    optional string actionLink = 4;  //the action that changes the states
+    repeated policyTree.StateVariableColumn stateVars = 5;
+    required int64 version = 6;
+}
+
+
+message RespUpdateVarAndSaveLog {
+    required int64 newVersion = 1;
+    repeated string updatedStateVars = 2;
+}
+
+message PushedActions{
+    required string agentLinkGid = 1;
+    required string taskGid = 2;
+    repeated policyTree.Action actions = 3;
+}
+//
+//message GidList{
+//    repeated string gids = 1;
+//}
+message SendInvitationResp{
+    repeated string agents = 1;
+    repeated string agentLinks = 2;
+    repeated string groups = 3;
+}
+
+message CreateAndJoinGroup{
+    optional string name = 1;
+    repeated policyTree.StateVariableColumn agentLinkVars = 2;
+}
+
+message JoinGroup{
+    required string groupGid = 1;
+    optional bool copy = 2[default = false];
+    optional string reuseOldAgentLink = 3;
+//    optional ActionSpace myActionSpace = 4;
+    repeated policyTree.StateVariableColumn agentLinkVars = 5;
+}
+
+//send this to all other
+message AgentLinkInfo{
+    required common.NodeInfo agentLink = 1;
+    optional common.NodeInfo agent = 2;
+    repeated policyTree.StateVariableColumn agentLinkVars = 3; //not mandatory
+//    optional ActionSpace actionSpace = 4; //get from joinGroup.
+    optional policyTree.StateVariableTable svt = 5; //for self only.
+}
+
+
+//resp of JoinGroup
+message NewGroupInfo{
+    required common.NodeInfo group = 1;
+    optional AgentLinkInfo myAgentLink = 2;
+    repeated AgentLinkInfo otherAgentLinks = 3;
+    optional policyTree.StateVariableTable groupSvt = 4;
+    optional policyTree.SharedActionSpace sharedActionSpace = 5;
+}
+
+
+message Invitation{
+    required string     invitee = 1;  //被邀请人
+    oneof message{
+        common.NodeInfo groupInfo = 2; //邀请加入的group信息
+        string groupGid = 3;
+    }
+    optional common.NodeInfo invitor = 4;  //邀请方
+}
+//
+
+message DoubleRange{
+    optional double min = 1;
+    optional double max = 2;
+}
+
+message DatetimeRange{
+    optional int64 min = 1;
+    optional int64 max = 2;
+}
+
+message StringRange{
+    optional string str=1;
+}
+
+message GidRange{
+    repeated string gid=1;
+}
+
+message OneFilterCondition{
+    required string name = 1;
+    oneof message{
+        DoubleRange doubleRange = 2;
+        DatetimeRange datetimeRange = 3;
+        StringRange stringRange = 4;
+        GidRange gidRange = 5;
+    }
+}
+
+message SARFilterConditions{
+    optional string agentLinkGid = 1;
+    optional string groupGid = 2;
+    required string filterGid = 3;
+    repeated OneFilterCondition conditons = 4;
+    optional string startId = 5;    //empty means start from first
+    optional int64 limit = 6;       //positive means query forward, negative means query afterward
+    optional string taskGid = 7;
+}
+
+message PauseOrCancelPolicyExecution{
+    required string agentLinkGid = 1;
+    optional string taskGid = 2;
+    optional string policyGid = 3;
+    required bool pauseOrCancel = 4[default=true]; //true mean stop, all the state variables\ action space will safed. else, just drop all.
+}
+
+message PauseOrCancelExecutionResp{
+    required string agentLinkGid = 1;
+    required bool puaseOrCancel = 4; //true mean stop, all the state variables\ action space will safed. else, just drop all.
+}
+
+message ReadAgentLinkVariableRequest {
+    required string variableGid = 1;
+    optional string agentLinkGid = 2;
+    optional string taskGid = 3;
+}
+
+message ReadAgentLinkVariableResponse {
+    optional string gid = 1; // may failed or not.
+}
+
+message PolicyExecutionError{
+    optional string taskGid = 1;
+    optional string policyGid = 2;
+    required string errorMessage = 3;
+    required int32 errorCode = 4;
+}
+
+message ReplacePara{
+    required string endNodeGid = 1;
+    required string paraName = 2;
+    required policyTree.OneValue value = 3;
+}
+
+message ReqReplaceParas{
+    required string fiNodeGid = 1;
+    repeated ReplacePara paras = 2;
+}
+
+message RespReplaceParas{
+    required string nodeGid = 1;
+}

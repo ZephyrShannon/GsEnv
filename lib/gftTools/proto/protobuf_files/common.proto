@@ -1,0 +1,176 @@
+
+
+package com.gftchina.common.persistence.common;
+import "errorCode.proto";
+
+message Color {
+	required int32 red = 1;
+	required int32 green = 2;
+	required int32 blue = 3;
+	optional int32 alpha = 4 [default = 255];
+}
+
+message Size {
+	required int32 width = 1;
+    required int32 height = 2;
+}
+
+message Rect {
+	required int32 left = 1;
+	required int32 top = 2;
+	required int32 right = 3;
+	required int32 bottom = 4;
+}
+
+message Error {
+	required string reason = 1;
+	optional int32 errorCode = 2;
+}
+
+message Meta {
+	message Entry {
+		required string key = 1;
+	    required string value = 2;
+	}
+
+    repeated Entry entries = 1;
+}
+
+message UploadedData {
+	optional Meta meta = 1;
+	optional bytes data = 2;
+}
+
+message GFTProtoBufData {
+	required string package_name = 1; // e.g.: com.gftchina.common.persistence.common
+	required string message_name = 2; // e.g.: Color
+	required bytes data = 3;
+}
+
+message GFTSerializable {
+	oneof serialzalbe {
+		GFTProtoBufData protobuf_data = 1;
+		string json_data = 2;
+	}
+}
+
+message Timestamp {
+	// Represents seconds of UTC time since Unix epoch
+	// 1970-01-01T00:00:00Z. Must be from 0001-01-01T00:00:00Z to
+	// 9999-12-31T23:59:59Z inclusive.
+	required int64 seconds = 1;
+
+	// Non-negative fractions of a second at nanosecond resolution. Negative
+	// second values with fractions must still have non-negative nanos values
+	// that count forward in time. Must be from 0 to 999,999,999
+	// inclusive.
+	optional int32 nanos = 2 [default = 0];
+}
+
+message PropertyContainerInfo {
+	required Meta props = 1;
+	repeated int32 boxes = 2;
+}
+
+message EdgeInfo {
+	required PropertyContainerInfo edge_prop = 1;
+	required string type = 2;
+	required int64 eid = 3;
+	required int64 sn_id = 4;
+	required int64 en_id = 5;
+}
+
+message NodeEdgesCount{
+		required string edge_type = 1;
+		//count , edges into node
+		optional int32 in = 2;
+		optional int32 out = 3;
+		optional string sub_type = 4;
+}
+
+message NodeInfo {
+	required PropertyContainerInfo node_prop = 1;
+	repeated NodeEdgesCount edges_stat = 2;
+	required int64 loc = 3;
+	required int64 nid = 4;
+	required int32 box_flag = 5;
+}
+
+message Colu
+mnDef { // table structure
+	enum ColumnType {
+		O = 1;
+		T = 2;
+		V = 3;
+		B = 4;
+		AUTO = 100;
+	}
+	required ColumnType ctype = 1;
+	optional string lb = 2;
+	optional string name = 3;
+}
+
+message RespTableGraphDefine {
+	repeated ColumnDef cols = 1;
+	optional string tbl_lb = 2;
+	optional string tbl_name = 3;
+	optional string FI_GID = 4;
+	optional int32 FI_result_idx = 5;
+	optional NodeInfo fi_node = 6;
+	optional bool optimized = 7;
+	optional int64 maxT = 8;
+	optional int64 minT = 9;
+}
+
+message ColInfo { // table data
+	enum ElementType {
+		Edge = 0;
+		Node = 1;
+	}
+	message NEProperty {
+		required int64 n = 1;
+		required string prop_n = 2;
+	}
+	message BinData {
+		required int32 binType = 1;
+		optional string bin = 2;
+	}
+
+	enum ValueType {
+		ID = 0;
+		PROPERTY = 1;
+		STRING = 2;
+		LONG = 3;
+		DOUBLE = 4;
+		DATE = 5;
+		BOOLEAN = 6;
+		NULL_VAL = 7;
+		GID = 8;
+		BIN = 9;
+		DATETIME = 10;
+	}
+	required ElementType elementType = 1;
+	required ValueType valueType = 2;
+	oneof V {
+		int64 n = 3;
+		string s = 4;
+		int64 l = 5;
+		double d = 6;
+		int64 dt = 7;
+		int64 dtMs = 8;
+		int32 null_val = 9;
+		string gid = 10;
+		BinData bin = 11;
+		NEProperty p = 12;
+	} 
+}
+
+message TableRowInfo {
+	repeated ColInfo col = 1;
+}
+
+message RespBase {
+	optional string task_gid = 1;
+	optional string error_info = 2;
+	repeated error.Exception4User allErrs = 3;
+}

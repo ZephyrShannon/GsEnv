@@ -1,0 +1,278 @@
+package com.gftchina.common.persistence.skill;
+import "common.proto";
+
+enum ValueType {
+	Gid = 0; // val.s is a gid
+	KW = 1; // val.s is a keyword
+	PropScalar = 2; // val is a scalar
+};
+
+message Para {
+	optional bool autoInput = 1;
+	optional bool required = 2;
+	optional ValueType valueType = 3 [default = Gid];
+    oneof val {
+		string s = 4;
+		int64 l = 5;
+		double d = 6;
+	};
+}
+
+enum SearchMode {
+	MatchWholeString = 0;
+	SubString = 1;
+	Fuzzy = 2;
+	Word2Vector = 3;
+}
+
+message KeywordSearchCondition {
+	optional SearchMode searchMode = 1 [default = Fuzzy];
+    repeated int32 keywordFields = 2;
+    optional string keyword = 3;
+}
+
+enum RespType {
+    OneRespRunNodeAction = 0;
+    RespRunNodeActionList = 1;
+}
+
+message SkillParameters {
+	message ParaEntry {
+		optional string name = 1;
+	    optional Para para = 2;
+	}
+	repeated ParaEntry paras = 1;
+
+	optional int32 limit = 2;
+    //repeated string tags = 3;
+    //optional int32 tagsUnion = 4;
+
+    message NodeSearchOverwriteEntry {
+	    optional string name = 1;
+        optional KeywordSearchCondition searchCondition = 2;
+	}
+    repeated NodeSearchOverwriteEntry nodeSearchOverwrites = 5;
+
+    optional int32 orderBy = 6;
+
+    optional RespType respType = 7;
+
+	optional bool needGenerateInstance = 8;
+	optional bool needReturnInstance = 9;
+	optional bool alwaysGenerateInstance = 10;
+	optional bool skipExecution = 11; // if set to true, skip execution, create and return skill instance
+
+	// true: create skill instance, create hasElementEdge between instance and result nodes, verify result nodes and update _b_verified on hasElementEdges
+	optional bool createHasElement = 12;
+
+	// if less than zero (which it should be if valid), means the id of the node in the local graph being debugged.
+	optional int32 debuggedId = 13;
+}
+
+message GroupPathInfo {
+	required int64 r_self = 1;
+	repeated GroupPathInfo sub_paths = 2;
+}
+
+message NodePathAggr {
+	enum NodePathType {
+		NPT_END = 1;
+        NPT_PASS = 2;
+        NPT_START = 3;
+	}
+	required int64 nid = 1;
+	required NodePathType node_path_type = 2;
+	repeated GroupPathInfo paths = 3;
+}
+
+message SubGraph {
+	repeated int64 nodeIds = 1;
+	repeated int64 edgeIds = 2;
+}
+
+message SubGraphMatch {
+	required string name = 1;
+	required SubGraph subGraph = 2;
+}
+
+message SrvFOGraph {
+	message TaskInstNodeParamCount {
+		required string prop = 1;
+		required int64 value = 2;
+	}
+	message NodeBrief {
+		required int64 id = 1;
+		required string gid = 2;
+		optional string mtime = 3;
+		repeated common.NodeEdgesCount edge_count = 4;
+		repeated TaskInstNodeParamCount task_inst_node_param_count = 5;
+		optional int64 version = 64;
+	}
+	repeated NodeBrief nodeBriefs = 1; // doesn't include all nodes in node_paths
+	repeated common.EdgeInfo edges = 2;
+	repeated NodeBrief path_only_nodes = 3; // nodes included in node_paths but not in nodes
+	repeated NodePathAggr node_paths = 4;
+	//optional NodeRef fo = 5;
+	// Martin 2018-01-03 this field contains same nodes as nodeBriefs, just with full details.
+	// whether nodeBriefs or nodes are filled depends on request response protocol
+	repeated common.NodeInfo nodes = 6;
+
+	// Martin 2018-01-31 add subgraph matches by name
+	repeated SubGraphMatch subGraphMatches = 7;
+}
+
+message RespFOGraphWithExtraInfo {
+	required SrvFOGraph graph = 1;
+	oneof extraInfo {
+		common.RespTableGraphDefine tableDefine = 2;
+		common.TableRowInfo tableRowInfo = 3;
+	}
+}
+
+message RespRunNodeAction {
+	message SkillExecStat {
+		optional int64 execMs = 1; // Total execution time, in millisecond
+        optional int64 nodesHits = 2; // Total number of nodes have traversed
+        optional int64 edgesHits = 3; // Total number of edges have traversed
+		// Martin 2017-11-17 rdbms had been replaced by lucene.
+        // optional int64 rdbmsHits = 4; // Total number of RDBMS queries
+        // optional int64 rdbmsRows = 5; // Total number of rows retrieved from RDBMS
+        // optional int64 rdbmsMs = 6; // Total time spent on RDBMS quuery, in millisecond
+		repeated string deletedNodeGids = 7;
+		repeated string deletedEdgeGids = 8;
+
+		// Martin 2017-11-17 add these for lucene hit
+		optional int64 indexHits = 9; // Total number of lucene index hits
+		optional int64 indexMs = 10; // Total time spent on lucene index, in millisecond
+	}
+	message WarningInfo {
+		optional bool limitWarning = 1 [ default = false ]; // if true, pop up the appropriate limit warning message in client side
+		optional bool timeoutWarning = 2 [ default = false ]; // if true, pop up the appropriate warning message in client side
+		optional string specifiedWarningTips = 3; // if this is empty, pop up predefined message of client side
+		optional int32 triggeredLimit = 4 [ default = -1 ];
+	};
+	message StatisticsInfo {
+		optional int32 jamCnt = 1;
+		optional string topJam = 2;
+		optional int32 jamTm = 3;
+		optional int32 lrgRlt = 4;
+		optional int32 maxRlt = 5;
+	}
+
+	repeated int64 loopEdgeIdSet = 1;
+	repeated RespFOGraphWithExtraInfo graphs = 2;
+	oneof extraInfo {
+		common.RespTableGraphDefine tableDefine = 3;
+	}
+	oneof extraInfo2 {
+		SkillExecStat skillExecStat = 4;
+	}
+	oneof Any {
+		WarningInfo warningInfo = 5;
+	}
+	optional StatisticsInfo stcInfo = 6;
+	optional common.NodeInfo runNodeInst = 7;
+	//optional DebugFilesPackage debugFilesPackage = 8;
+	optional string url = 9;
+}
+
+
+message RespRunNodeActions {
+	repeated RespRunNodeAction resps = 1;
+	optional common.NodeInfo runNodeInst = 2;
+}
+
+message PatternGraphFunctionParameters {
+	optional SkillParameters inputParas = 1;
+	repeated string paras4Substitution = 2;
+	optional string keyword4Substitution = 3;
+	optional int32 limit4Substitution = 4;
+	repeated string outputParas = 5; // name of output nodes in skill def
+	optional bool fillProperty = 6 [default = false];
+}
+
+message PatternRunGraphFunctionRequest {
+	required string patternDefGid = 1;
+	optional PatternGraphFunctionParameters paras = 2;
+}
+
+message PatternGenerateRequest {
+	required string patternDefGid = 1;
+	optional SkillParameters inputParas = 2;
+	repeated string outputParas = 3; // name of nodes in skill def to be generated
+	optional bool isSpawn = 4 [default = false];
+}
+
+message NodeInPattern {
+	// although the name of the link node can be found in linkNode, put the link node name here for easy access
+	required string linkNodeName = 1;
+	// information of link node or local node, it's optional because in some cases only linkNodeName need to be filled
+	optional common.NodeInfo linkNode = 2;
+	// information of the neo4j node which the link node or local node points to.
+	optional common.NodeInfo referredNode = 3;
+}
+
+message EdgeInPattern {
+	required string type = 1;
+	required string startLinkNodeName = 2;
+	required string endLinkNodeName = 3;
+	required common.Meta props = 4;
+}
+
+message PatternGraph {
+	required string patternDefGid = 1;
+	repeated NodeInPattern nodes = 2;
+	repeated EdgeInPattern edges = 3;
+}
+
+message PatternGenerateResponse {
+	repeated NodeInPattern nodes = 1; // NodeInPattern.linkNode will not be filled in resposne
+	optional PatternGraph spawnedPattern = 2;
+}
+
+// the response is PatternGraph
+message PatternQueryRequest {
+	required string patternDefGid = 1;
+}
+
+// the sequence of add delete operations: delete edge -> delete node -> add node -> add edge -> replace node
+message PatternModifyParameters {
+	required bool isSpawn = 1; // true for generate a new pattern, false for modify the pattern specified by patternDefGid
+	// for deletion, NodeInPattern.linkNodeName is used, NodeInPattern.linkNode and NodeInPattern.referredNode are ignored
+	repeated NodeInPattern nodesToBeDeleted = 2;
+	// for deletion, edge props will be used to filter the right edge
+	// in case there are multiple edges with same start end nodes as well as same edge type
+	repeated EdgeInPattern edgesToBeDeleted = 3;
+	// if the node to be added referrs a neo4j node, fill property VNP_REF_GID of NodeInPattern.linkNode
+	// with gid of the neo4j node
+	repeated NodeInPattern nodesToBeAdded = 4;
+	repeated EdgeInPattern edgesToBeAdded = 5;
+	// find link node or local node with given name, point to the given new node.
+	// Fill property VNP_REF_GID of NodeInPattern.linkNode with gid of the node to point to
+	repeated NodeInPattern nodesToBeReplaced = 6;
+	// edge property change can be simulated by delete old edge then add new edge
+}
+
+message PatternModifyRequest {
+	required string patternDefGid = 1;
+	required PatternModifyParameters paras = 2;
+}
+
+message PatternModifyResponse {
+	required PatternGraph pattern = 1;
+	// if existingPatternGid is present, still return the modifed pattern graph, but the modification is not saved or spawned.
+	optional string existingPatternGid = 2;
+}
+
+message PatternModifyAndRunGraphFunctionRequest {
+	required string patternDefGid = 1;
+	required PatternModifyParameters modifyParas = 2;
+	optional PatternGraphFunctionParameters runParas = 3;
+}
+
+message PatternModifyAndRunGraphFunctionResponse {
+	// the modified pattern will be saved. return the gid of the saved or existing def node
+	required string modifiedPatternDefGid = 1;
+	required RespRunNodeAction result = 2;
+}
+

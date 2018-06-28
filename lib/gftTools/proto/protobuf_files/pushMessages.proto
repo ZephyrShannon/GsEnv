@@ -1,0 +1,164 @@
+package com.gftchina.common.persistence.pushMessage;
+
+import "common.proto";
+import "skill.proto";
+
+enum Type {
+	NODE_CHANGE = 1;
+	//QCOIN_CHANGE = 2;
+	//FQ_STATUS_CHANGE = 3;
+	TASK_INST_CHANGE = 4;
+	APPEND_ONLY_CONTENT = 5;
+	NOTIFY_BY_TOKEN = 6;
+	EDGE_CHANGE = 7;
+	NOTIFICATION_CHANGE = 10;
+    CLIENT_2_CLIENTS = 11; // the message is sent from client to other clients
+	CALC_PROCESS_INFO = 12;
+	SKILL_INST_RESULT_CHANGE = 13;
+}
+
+message KickOff {
+	required string kickedBy = 1;
+}
+
+message PropertyChanges {
+	required string gid = 1;
+	required common.Meta changedProperties = 2;
+	required string triggerToken = 3;
+	required string triggerUserId = 4;
+	required string triggerUserName = 5;
+}
+
+message NotificationPackageInfo {
+	required int64 totalNum = 1;
+	required int64 currentOffset = 2;
+	required int64 currentNum = 3;
+}
+
+message NodesChanges {
+	required NotificationPackageInfo packInfo = 1;
+	required int64 triggerReqNO = 2;
+	repeated PropertyChanges changes = 3;
+	
+}
+
+message NodeChange {
+	optional string registerGid = 1;
+	required PropertyChanges changes = 2;
+}
+
+message EdgeChange { // same as node change
+	optional string registerGid = 1;
+	required PropertyChanges changes = 2;
+}
+
+message SkillInstResultChange
+{
+	optional common.NodeInfo inst = 1;
+	optional common.NodeInfo trigger_node = 2;
+	optional skill.RespRunNodeActions delta_result = 3;
+}
+
+enum FRunStep {
+	CreateAndWait = 0;
+	StartInitializing = 1;
+	ExpandAndRuning = 2;
+	End = 3;
+	ReplacedByNewFQ = 4;
+    AlreadyRunning = 5;
+    VQShutdown = 6;
+}
+
+message AppendedContent {
+	required int64 sequence = 1;
+    required string owner = 2;
+    required string content = 3;
+    required int64 ctime = 4; // java.util.Date.getTime: Returns the number of milliseconds since January 1, 1970, 00:00:00 GMT represented by this Date object.
+}
+
+message ContentAppended {
+	optional string registerGid = 1;
+	required string nodeGid = 2;
+    required AppendedContent change = 3;
+}
+
+message NewNotificationFromServer {
+	required int64 timestamp = 1;
+}
+
+message MessageFromOtherClient {
+	required bytes body = 1; // same as EfuClientMessage2Clients.body
+    required string userId = 2;
+	required string token = 3;
+}
+
+message CalcProcessInfo {
+	message CalcInfo {
+		message UsedCache {
+			required string cacheGid = 1;
+			required int64 createTime = 2;
+		}
+		message DirtyCache {
+			message CacheJInfo {
+				required string gid = 1;   	//gid of original j
+				required int64 oldTime = 2; //time stampe of j when the cache is craeted
+				required int64 curTime = 3; //current timestamp.
+			}
+			required string cache = 1;
+			required CacheJInfo cacheJInfo = 2;
+		}
+		message InvalidCache {
+			message CachePythonCodeInfo {
+				required string gid = 1;   //gid of python function
+        		required int32 oldVer = 2; //version when the cache is created
+        		required int32 curVer = 3; //current version of the python
+			}
+			required string cacheGid = 1;
+			required CachePythonCodeInfo cachePythonCodeInfo = 2;
+		}
+		message FailedCache{
+			required string cacheGid  = 1;
+			optional int64 failedTime = 2;
+		}
+		message OutOfDateCache{
+		    required string cacheGid = 1;
+		    required int64  maxTime = 2;
+		}
+
+		repeated UsedCache allUsedCaches = 1;
+		repeated DirtyCache dirtyCaches = 2;
+		repeated InvalidCache invalidCaches = 3;
+
+		required int32 msEstTime = 4;
+		optional string csGid = 5; //gid of cacheServer.
+		repeated FailedCache filedOnes = 6;
+		optional string jGid = 7;
+		repeated OutOfDateCache outOfDateCaches = 8;
+	}
+
+	message ProcessInfo {
+		// total time of waiting, from task is created to task start calculation, includ:
+		// -- wait time in VQ queue
+		// -- wait time in cache server
+	    // -- -- also include time spent on loading data
+		optional int32 msWaitBeforeCalcStart = 1;
+		optional int32 numberOfTotalInstrctions = 2;
+		optional int32 numberOfExecutedInstrctions = 3;
+		optional int32 msCalcHasRun = 4;
+	    // For C++ instructions, it's name of instruction; for python instruction, it's GID of the function
+		optional string currentExecutingInstrctionNameOrGID = 5;
+		optional int32 memUsedInKB = 6;   //memory used, (KB)
+		optional int32 cpuUsageInPercent = 7;  //cpu used in percent.
+		optional string csGid = 8;
+	}
+
+	oneof message {
+		CalcInfo calcInfo = 1;
+		ProcessInfo processInfo = 2;
+	}
+	required int32 requestNum = 3;
+}
+
+message jCacheInfos{
+	repeated CalcProcessInfo cacheInfos = 1;
+}
