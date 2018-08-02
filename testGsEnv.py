@@ -3,18 +3,41 @@ from lib.json_requests import view_data
 import datetime
 from lib.gftTools import gsUtils
 
+import time
 
-gsEnv = GsEnv.GsEnv('SHANZ', 'gft', 'q.gftchina.com', 13567)
-# gsEnv = GsEnv.GsEnv('SHANBIN', 'gft', '192.168.1.140', 9030)
+import numpy as np
+import pandas as pd
+from lib.gftTools.proto import hbaseTable_pb2
+
+# gsEnv = GsEnv.GsEnv('SHENBIN', 'gft', 'q.gftchina.com', 13567)
+# gsEnv = GsEnv.GsEnv('SHENBIN', 'gft', '192.168.1.140', 9030)
+gsEnv = GsEnv.GsEnv('SHANZ', 'gft', '192.168.1.140', 9030)
 
 gsEnv.start()
-# get hbase table from gs
-tab = gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", 123,123)
-
 gsEnv.list_all_agent_links()
 
-gsEnv.join_group_by_index(14)
+gsEnv.join_group_by_index(20)
+
+ts = int(time.time() * 1000)
+
+max_timestamp,tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", ts,None))
+
+
+        # create column tables
+
+
+
+
+resp = gsEnv.openTask("81F1F079A9494959956CDF5301E33113")
+policy = gsEnv.get_policy("81F1F079A9494959956CDF5301E33113",True)
+
+
+
+
 inOrOut = True
+
+import tensorflow.examples.tutorials.mnist.input_data as input_data
+mnist = input_data.read_data_sets("MNIST_data/", one_hot=True, source_url='http://yann.lecun.com/exdb/mnist/')
 
 neighbor_infos = gsEnv.client.get_neighbors("1E10EA792DBC94A959A0D34432138EFE","DATAFLOW", inOrOut, 1000)
 neighbor_infos = gsEnv.client.get_neighbors("3544C8290EFC41D3A8D098DD2159424D","DATAFLOW", inOrOut, 1000)

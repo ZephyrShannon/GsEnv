@@ -101,7 +101,9 @@ IN_SKILL_GID = '36C1D27B568344449CDC6EA9E281DFE9'
 OUT_SKILL_GID  = "F18E7BFA63364709816887F6EB8AC66C"
 
 def get_table_from_hbase_req_json(table_gid: str, start_date:int, end_date:int):
-    req = {"tableGid":table_gid, "startDate":start_date, "end_Date":end_date}
+    req = {"tableGid":table_gid, "startDate":start_date}
+    if end_date is not None:
+        req["end_Date"] = end_date
     return json.dumps(req)
 
 def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit = 9999):
@@ -245,8 +247,43 @@ class DisconEvent:
         self.reason = reason
 
 
-def hbase_table_to_dataframe(self, table):
-    pass
+
+def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
+    col_len = tab.rows.__len__()
+    all_cols = list()
+    for i in range(tab.meta.oSize + tab.meta.tSize + tab.meta.vSize):
+        all_cols.append(list())
+    max_timestamp = 0
+    for row in tab.rows:
+        if max_timestamp < row.timestamp:
+            max_timestamp = row.timestamp
+
+        idx = 0
+        for o in row.o:
+            all_cols[idx].append(o)
+            idx += 1
+
+        for t in row.t:
+            all_cols[idx].append(t)
+            idx += 1
+
+        for v in row.v:
+            all_cols[idx].append(v)
+            idx += 1
+
+    d = dict()
+    idx = 0
+    for name in tab.meta.column_names:
+        d[name] = all_cols[idx]
+        idx += 1
+    df = pd.DataFrame(d, columns=tab.meta.column_names)
+
+    idx = tab.meta.oSize
+    for i in range(tab.meta.tSize):
+        name = tab.meta.column_names[i + idx]
+        df[name] = pd.to_datetime(df[name], unit='ms').dt.tz_localize('Asia/Shanghai')
+
+    return (max_timestamp, df)
 
 class GsClient(WebSocketClientProtocol):
     def __init__(self, user, pwd, ip, port, lang, loop):
