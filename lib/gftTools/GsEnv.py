@@ -253,11 +253,7 @@ def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
     all_cols = list()
     for i in range(tab.meta.oSize + tab.meta.tSize + tab.meta.vSize):
         all_cols.append(list())
-    max_timestamp = 0
     for row in tab.rows:
-        if max_timestamp < row.timestamp:
-            max_timestamp = row.timestamp
-
         idx = 0
         for o in row.o:
             all_cols[idx].append(o)
@@ -282,8 +278,8 @@ def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
     for i in range(tab.meta.tSize):
         name = tab.meta.column_names[i + idx]
         df[name] = pd.to_datetime(df[name], unit='ms').dt.tz_localize('Asia/Shanghai')
-
-    return (max_timestamp, df)
+    df.last_update_ts = tab.meta.updateTimestamp
+    return df
 
 class GsClient(WebSocketClientProtocol):
     def __init__(self, user, pwd, ip, port, lang, loop):

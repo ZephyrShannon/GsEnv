@@ -20,7 +20,7 @@ gsEnv.join_group_by_index(20)
 
 ts = int(time.time() * 1000)
 
-max_timestamp,tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", ts,None))
+tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", ts,None))
 
 
         # create column tables
