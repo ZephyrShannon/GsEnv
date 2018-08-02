@@ -11,12 +11,16 @@ from lib.gftTools.proto.responses_pb2 import Message2Client
 from lib.gftTools.proto import agentAndAction_pb2
 from lib.gftTools.proto import policyTree_pb2
 
+from lib.gftTools.proto import hbaseTable_pb2
+
 from lib.json_requests import view_data
 
 from lib.gftTools import  gsUtils
 from lib.json_requests import run_skill
 import pymongo
 import datetime
+
+import json
 
 import urllib
 
@@ -88,11 +92,17 @@ MT_AGENT_ACTIONS = 9
 ST_UPDATE_VARIABLE_AND_SAVE_LOG = 1
 GET_POLICY_TREE = 6
 
+MT_DATA_VISUALIZATION = 4
+ST_GET_ORIG_J_FROM_HBASE = 30
+
 
 MAIN_TASK_VAR_GID = "E258F454466E4AEC9AF8C3D1589D1BDE"
 IN_SKILL_GID = '36C1D27B568344449CDC6EA9E281DFE9'
 OUT_SKILL_GID  = "F18E7BFA63364709816887F6EB8AC66C"
 
+def get_table_from_hbase_req_json(table_gid: str, start_date:int, end_date:int):
+    req = {"tableGid":table_gid, "startDate":start_date, "end_Date":end_date}
+    return json.dumps(req)
 
 def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit = 9999):
     paras = {"CircleSkill_Start": start_gid, "edgetype": edge_type}
@@ -101,7 +111,7 @@ def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit
     else:
         skill_gid = OUT_SKILL_GID
     req_json = run_skill.create_run_skill_para(skill_gid, paras, limit)
-    print(req_json)
+    # print(req_json)
     return req_json
 
 
@@ -235,6 +245,9 @@ class DisconEvent:
         self.reason = reason
 
 
+def hbase_table_to_dataframe(self, table):
+    pass
+
 class GsClient(WebSocketClientProtocol):
     def __init__(self, user, pwd, ip, port, lang, loop):
         super().__init__()
@@ -336,6 +349,21 @@ class GsClient(WebSocketClientProtocol):
             return None
         else:
             return resp
+
+
+
+    def get_table_from_hbase(self, table_gid, start_date, end_date):
+        ''' return a table defined in HBaseTable'''
+        req_json = get_table_from_hbase_req_json(table_gid, start_date, end_date)
+        resp = self.send_req(MT_DATA_VISUALIZATION, ST_GET_ORIG_J_FROM_HBASE, req_json, 100)
+        if has_exception(resp):
+            print_response_exceptions(resp, "Get table from hbase failed,")
+            return None
+        else:
+            table = hbaseTable_pb2.HBaseTable()
+            table.ParseFromString(resp.body)
+            return table
+
 
     def run_skill_get_as_grphas(self, skill_gid, skill_paras:dict, limit:int):
         server_resp = self.run_skill(skill_gid, skill_paras, limit)
