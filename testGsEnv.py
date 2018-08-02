@@ -8,6 +8,9 @@ gsEnv = GsEnv.GsEnv('SHANZ', 'gft', 'q.gftchina.com', 13567)
 # gsEnv = GsEnv.GsEnv('SHANBIN', 'gft', '192.168.1.140', 9030)
 
 gsEnv.start()
+# get hbase table from gs
+tab = gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", 123,123)
+
 gsEnv.list_all_agent_links()
 
 gsEnv.join_group_by_index(14)
