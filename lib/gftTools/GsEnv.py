@@ -103,7 +103,7 @@ OUT_SKILL_GID  = "F18E7BFA63364709816887F6EB8AC66C"
 def get_table_from_hbase_req_json(table_gid: str, start_date:int, end_date:int):
     req = {"tableGid":table_gid, "startDate":start_date}
     if end_date is not None:
-        req["end_Date"] = end_date
+        req["endDate"] = end_date
     return json.dumps(req)
 
 def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit = 9999):
@@ -217,6 +217,8 @@ class GsEnv:
             self.loop.run_until_complete(asyncio.wait_for(msg_fut, timeout_sec, loop=self.loop))
         except asyncio.TimeoutError:
             return None
+        except DisconEvent as event:
+            return event
         return msg_fut.result()
 
     def wait_push_msg(self, timeout_sec=100):
@@ -240,7 +242,7 @@ import zlib
 import json
 
 
-class DisconEvent:
+class DisconEvent(Exception):
     def __init__(self, wasClean, code, reason):
         self.wasClean = wasClean
         self.code = code
@@ -277,7 +279,7 @@ def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
     idx = tab.meta.oSize
     for i in range(tab.meta.tSize):
         name = tab.meta.column_names[i + idx]
-        df[name] = pd.to_datetime(df[name], unit='ms').dt.tz_localize('Asia/Shanghai')
+        df[name] = pd.to_datetime(df[name], unit='ms')   #.dt.tz_localize('Asia/Shanghai')
     df.last_update_ts = tab.meta.updateTimestamp
     return df
 
@@ -387,7 +389,12 @@ class GsClient(WebSocketClientProtocol):
 
     def get_table_from_hbase(self, table_gid, start_date, end_date):
         ''' return a table defined in HBaseTable'''
+        if isinstance(start_date, datetime.datetime):
+            start_date = int(start_date.timestamp() * 1000)
+        if isinstance(end_date, datetime.datetime):
+            end_date = int(end_date.timestamp() * 1000)
         req_json = get_table_from_hbase_req_json(table_gid, start_date, end_date)
+        print("send request json:"+ req_json)
         resp = self.send_req(MT_DATA_VISUALIZATION, ST_GET_ORIG_J_FROM_HBASE, req_json, 100)
         if has_exception(resp):
             print_response_exceptions(resp, "Get table from hbase failed,")
@@ -551,6 +558,8 @@ class GsClient(WebSocketClientProtocol):
             self.loop.run_until_complete(asyncio.wait_for(ft, timeout_sec, loop=self.loop))
         except asyncio.TimeoutError:
             return None
+        except DisconEvent as ev:
+            return None
         return ft.result()
 
     def send_hello(self):
@@ -616,14 +625,15 @@ class GsClient(WebSocketClientProtocol):
             resp = Message2Client()
             resp.ParseFromString(payload)
             if resp.HasField("loginResponse"):
-                future = self.req_map.get(resp.loginResponse.common.requestNo)
-                future.set_result(resp.loginResponse)
+                future = self.req_map.pop(resp.loginResponse.common.requestNo, None)
+                if future is not None:
+                    future.set_result(resp.loginResponse)
                 return
             elif resp.HasField("efuResponse"):
                 print("Get resp of:" + str(resp.efuResponse.common.requestNo) + "len:" + str(
                     len(payload)) + " type:" + str(resp.efuResponse.mainRequestNo) + ":" + str(
                     resp.efuResponse.subRequestNo))
-                future = self.req_map.get(resp.efuResponse.common.requestNo)
+                future = self.req_map.pop(resp.efuResponse.common.requestNo, None)
                 if future is not None:
                     future.set_result(self.unwrapper_response(resp.efuResponse))
                 return
@@ -634,14 +644,16 @@ class GsClient(WebSocketClientProtocol):
 
     def onClose(self, wasClean, code, reason):
         self.closed = True
+        print("Connection closed!")
         if self.connnection_done is not None:
             self.connnection_done.set_result(False)
             self.connnection_done = None
         dis_event = DisconEvent(wasClean, code, reason)
         if self.push_future is not None:
-            self.push_future.set_result(dis_event)
+            self.push_future.set_exception(dis_event)
         for ft in self.req_map.values():
-            ft.set_result(dis_event)
+            ft.set_exception(dis_event)
+        self.req_map.clear()
 
     async def wait(self):
         if self.closed:

@@ -1,3 +1,4 @@
+
 from lib.gftTools import GsEnv
 from lib.json_requests import view_data
 import datetime
@@ -8,19 +9,38 @@ import time
 import numpy as np
 import pandas as pd
 from lib.gftTools.proto import hbaseTable_pb2
+from datetime import date, datetime
+
+d = date(2005, 7, 14)
+
+
+(d.toordinal() - date(1970,1,1).toordinal()) * 86400000
 
 # gsEnv = GsEnv.GsEnv('SHENBIN', 'gft', 'q.gftchina.com', 13567)
 # gsEnv = GsEnv.GsEnv('SHENBIN', 'gft', '192.168.1.140', 9030)
-gsEnv = GsEnv.GsEnv('SHANZ', 'gft', '192.168.1.140', 9030)
+gsEnv = GsEnv.GsEnv('SHANZ', 'gft', '192.168.1.140', 9023)
 
 gsEnv.start()
 gsEnv.list_all_agent_links()
 
-gsEnv.join_group_by_index(20)
+# gsEnv.join_group_by_index(20)
 
-ts = int(time.time() * 1000)
+from datetime import date, datetime
+import pytz
+dt_local = datetime(2016, 1, 1, 0, 0)
+dt_local.timestamp()
+dt_shanghai = dt_local.astimezone(pytz.timezone("Asia/Shanghai"))
+dt_shanghai.timestamp()
+dt_utc = dt_local.astimezone(pytz.UTC)
+dt_utc.timestamp()
 
-tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("AEBB03867B63B05A8DC3017EA7A2054E", ts,None))
+ts_begin = datetime(2016, 12, 31, 0, 0)
+ts_end = datetime(2018,1,1,0,0)
+
+tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("1232E3D415938F7DCC777D184756EBEF", ts_begin, ts_end))
+
+gsEnv.wait_push_msg(10)
+
 
 
         # create column tables
