@@ -6,7 +6,7 @@ MAIN_REQ_NO = 1
 SUB_REQ_NO = 24
 
 def create_para(key, val, paras_dict):
-    val_obj:dict = dict()
+    val_obj = dict()
     if isinstance(val, str):
         if gsUtils.is_gs_gid(val):
             val_obj['gid'] = val

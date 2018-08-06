@@ -17,7 +17,6 @@ from lib.json_requests import view_data
 
 from lib.gftTools import  gsUtils
 from lib.json_requests import run_skill
-import pymongo
 import datetime
 
 import json
