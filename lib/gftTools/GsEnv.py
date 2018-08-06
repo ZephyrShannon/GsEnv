@@ -221,7 +221,7 @@ class GsEnv:
             return event
         return msg_fut.result()
 
-    def wait_push_msg(self, timeout_sec=100):
+    def wait_push_msg(self, timeout_sec=0):
         push_msg_fut = asyncio.Future()
         self.client.push_future = push_msg_fut
         return self.__waiting_fut__(push_msg_fut, timeout_sec)
@@ -556,7 +556,7 @@ class GsClient(WebSocketClientProtocol):
         ft = self.sendReq(req_data, req_no)
         try:
             self.loop.run_until_complete(asyncio.wait_for(ft, timeout_sec, loop=self.loop))
-        except asyncio.TimeoutError:
+        except asyncio.TimeoutError as to:
             return None
         except DisconEvent as ev:
             return None
@@ -656,7 +656,7 @@ class GsClient(WebSocketClientProtocol):
         self.req_map.clear()
 
     async def wait(self):
-        if self.closed:
+        if not self.closed:
             await asyncio.sleep(1)
 
             #
