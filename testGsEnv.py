@@ -3,6 +3,7 @@ from lib.gftTools import GsEnv
 from lib.json_requests import view_data
 import datetime
 from lib.gftTools import gsUtils
+from lib.gftTools.data.j_dict import AllJMap
 
 import time
 
@@ -13,10 +14,17 @@ from datetime import date, datetime
 from lib.gftTools import gftIO
 
 gsEnv = GsEnv.GsEnv('SHENBIN', 'gft', 'q.gftchina.com', 13567)
+# gsEnv = GsEnv.GsEnv('liuqun', 'gft', '192.168.1.166', 9080)
 #start connect and login
 gsEnv.start()
+gsEnv.list_all_agent_links()
+gsEnv.join_group_by_index(5)
 
-# gsEnv.join_group_by_index(20)
+gsEnv.openTask("5A6BD45239DC4F90BC88220AFCEBC57C")
+p = gsEnv.get_policy("5A6BD45239DC4F90BC88220AFCEBC57C", True)
+
+all_j_map = AllJMap.get_map()
+
 
 from datetime import date, datetime
 import pytz
@@ -24,9 +32,12 @@ import pytz
 ts_begin = datetime(2016, 12, 31, 0, 0)
 ts_end = datetime(2018,1,1,0,0)
 
-
+start = time.time()
+gsEnv.client.get_table_from_hbase("C07FAD50BCF1A5E3B410177656B3A67F", ts_begin, ts_end)
+print("read table cost:" + str(time.time()-start))
 
 tab = GsEnv.get_max_timestamp_and_dataframe(gsEnv.client.get_table_from_hbase("C07FAD50BCF1A5E3B410177656B3A67F", ts_begin, ts_end))
+gsEnv.console_wait()
 
 '''your logic here.....
    if you have a big loop, periodically call this:

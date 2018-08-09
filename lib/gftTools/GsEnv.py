@@ -22,6 +22,9 @@ import datetime
 import json
 
 import urllib
+from aioconsole import ainput
+import time
+
 
 try:
     import asyncio
@@ -115,6 +118,8 @@ def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit
     # print(req_json)
     return req_json
 
+async def async_console_wait():
+    s = await ainput('press some to continue')
 
 class TaskData:
     def __init__(self, gid):
@@ -220,6 +225,10 @@ class GsEnv:
             return event
         return msg_fut.result()
 
+    def console_wait(self):
+        self.loop.run_until_complete(async_console_wait())
+
+
     def wait_push_msg(self, timeout_sec=0):
         push_msg_fut = asyncio.Future()
         self.client.push_future = push_msg_fut
@@ -247,13 +256,36 @@ class DisconEvent(Exception):
         self.code = code
         self.reason = reason
 
+class RowAggreagtor:
+    def __init__(self, row_size):
+        self.all_cols = list()
+        for i in range(row_size):
+            self.all_cols.append(list())
+
+    def add_one_row(self, row):
+        idx = 0
+        for o in row.o:
+            self.all_cols[idx].append(o)
+            idx += 1
+
+        for t in row.t:
+            self.all_cols[idx].append(t)
+            idx += 1
+
+        for v in row.v:
+            self.all_cols[idx].append(v)
+            idx += 1
 
 
-def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
-    col_len = tab.rows.__len__()
+
+def get_max_timestamp_and_dataframe_with_for_loop(tab:hbaseTable_pb2.HBaseTable):
+    # col_len = tab.rows.__len__()
+    import time
+    start = time.time()
     all_cols = list()
     for i in range(tab.meta.oSize + tab.meta.tSize + tab.meta.vSize):
         all_cols.append(list())
+
     for row in tab.rows:
         idx = 0
         for o in row.o:
@@ -267,11 +299,57 @@ def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
         for v in row.v:
             all_cols[idx].append(v)
             idx += 1
-
+    for_loop_end = time.time()
+    print("For loop takes:" + str(for_loop_end - start))
     d = dict()
     idx = 0
     for name in tab.meta.column_names:
         d[name] = all_cols[idx]
+        idx += 1
+    df = pd.DataFrame(d, columns=tab.meta.column_names)
+
+    idx = tab.meta.oSize
+    for i in range(tab.meta.tSize):
+        name = tab.meta.column_names[i + idx]
+        df[name] = pd.to_datetime(df[name], unit='ms')   #.dt.tz_localize('Asia/Shanghai')
+    df.last_update_ts = tab.meta.updateTimestamp
+
+    df_end = time.time()
+    print("For loop takes:" + str(df_end - for_loop_end))
+    return df
+
+
+def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
+    # col_len = tab.rows.__len__()
+    # all_cols = list()
+    # for i in range(tab.meta.oSize + tab.meta.tSize + tab.meta.vSize):
+    #     all_cols.append(list())
+    #
+    # for row in tab.rows:
+    #     idx = 0
+    #     for o in row.o:
+    #         all_cols[idx].append(o)
+    #         idx += 1
+    #
+    #     for t in row.t:
+    #         all_cols[idx].append(t)
+    #         idx += 1
+    #
+    #     for v in row.v:
+    #         all_cols[idx].append(v)
+    #         idx += 1
+    import time
+    start = time.time()
+    aggr = RowAggreagtor(tab.meta.oSize + tab.meta.tSize + tab.meta.vSize)
+    [aggr.add_one_row(row) for row in tab.rows]
+
+    for_loop_end = time.time()
+    print("For loop takes:" + str(for_loop_end - start))
+
+    d = dict()
+    idx = 0
+    for name in tab.meta.column_names:
+        d[name] = aggr.all_cols[idx]
         idx += 1
     df = pd.DataFrame(d, columns=tab.meta.column_names)
 
@@ -400,7 +478,9 @@ class GsClient(WebSocketClientProtocol):
             return None
         else:
             table = hbaseTable_pb2.HBaseTable()
+            start = time.time()
             table.ParseFromString(resp.body)
+            print("parse protobuf cost:" + str(time.time() - start))
             return table
 
 
