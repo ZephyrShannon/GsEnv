@@ -6,7 +6,6 @@ import pandas as pd
 def convert_dailyRet(price,freq):
     if freq in (0,10,11,50):
         raise ValueError('Does not support!Please choose other options')
-    price = price.asMatrix()
     price = price.dropna(axis=1,how='all') #remove non-business days
     monthly_price = price.resample('M').last()
     quarterly_price = price.resample('Q').last()

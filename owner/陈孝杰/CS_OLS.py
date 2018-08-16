@@ -7,8 +7,6 @@ import numpy as np
 from numpy import nan as NA
 
 def CS_OLS(Y,X):
-    Y = Y.asMatrix()
-    X = X.asMatrix()
     alldates = pd.to_datetime(np.intersect1d(X.index, Y.index))
     Y = Y.reindex(alldates, Y.columns, fill_value=NA)
     X = X.reindex(alldates, Y.columns, fill_value=NA)
