@@ -517,6 +517,9 @@ class GsClient(WebSocketClientProtocol):
             ret = nodes_map.get(node_gid)
             if (ret is not None):
                 self.node_caches.__setitem__(node_gid, ret)
+            else:
+                print("Can not find node:" + node_gid)
+                return None
         return ret[1]
 
     def __read_nodes_from_server__(self, node_gid):

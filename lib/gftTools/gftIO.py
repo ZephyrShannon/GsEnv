@@ -1092,7 +1092,7 @@ def oSet2Hex(oSet):
     convert array to 32 bit hex array
     """
     ret = oSet.astype(oDataType)
-    return np.apply_along_axis(intTuple2Str, 1, ret.reshape(-1, 1))
+    return np.apply_along_axis(intTuple2Str, 1, ret.values.reshape(-1, 1))
 
 
 def get_primary_t_name_with_def(data, pt_name):
