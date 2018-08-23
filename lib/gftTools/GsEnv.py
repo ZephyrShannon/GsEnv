@@ -22,7 +22,6 @@ import datetime
 import json
 
 import urllib
-from aioconsole import ainput
 import time
 
 
@@ -119,6 +118,7 @@ def get_neighbors_req_json(start_gid: str, edge_type: str, inOrOout: bool, limit
     return req_json
 
 async def async_console_wait():
+    from aioconsole import ainput
     s = await ainput('press some to continue')
 
 class TaskData:
@@ -216,23 +216,12 @@ class GsEnv:
         if group is not None:
             self.cur_agent_link = agent_link_gid
 
-    def __waiting_fut__(self, msg_fut: Future, timeout_sec):
-        try:
-            self.loop.run_until_complete(asyncio.wait_for(msg_fut, timeout_sec, loop=self.loop))
-        except asyncio.TimeoutError:
-            return None
-        except DisconEvent as event:
-            return event
-        return msg_fut.result()
-
     def console_wait(self):
         self.loop.run_until_complete(async_console_wait())
 
 
     def wait_push_msg(self, timeout_sec=0):
-        push_msg_fut = asyncio.Future()
-        self.client.push_future = push_msg_fut
-        return self.__waiting_fut__(push_msg_fut, timeout_sec)
+        self.client.wait_push_msg(timeout_sec)
 
     def view_data(self, gid, time_begin, time_end, write2file, calc_server_gid, timeout_sec):
         if isinstance(time_begin, str):
@@ -389,6 +378,20 @@ class GsClient(WebSocketClientProtocol):
     #     cursor = self.conn.execute(str.format("SELECT * FROM nodes where g='{0}", gid))
     #     return cursor.fetchone()
 
+
+    def wait_push_msg(self, timeout_sec=0):
+        push_msg_fut = asyncio.Future()
+        self.push_future = push_msg_fut
+        return self.__waiting_fut__(push_msg_fut, timeout_sec)
+
+    def __waiting_fut__(self, msg_fut: Future, timeout_sec):
+        try:
+            self.loop.run_until_complete(asyncio.wait_for(msg_fut, timeout_sec, loop=self.loop))
+        except asyncio.TimeoutError:
+            return None
+        except DisconEvent as event:
+            return event
+        return msg_fut.result()
 
 
 
@@ -596,7 +599,9 @@ class GsClient(WebSocketClientProtocol):
         join_group.reuseOldAgentLink = agent_link_gid
         efu_req = self.wrapper_up_request(9, 3, join_group.SerializeToString(), 100)
         resp = self.sync_send_req(efu_req.SerializeToString(), efu_req.efuRequest.common.requestNo)
-        if (not has_exception(resp)):
+        if resp is None:
+            return None
+        elif (not has_exception(resp)):
             new_group = agentAndAction_pb2.NewGroupInfo()
             new_group.ParseFromString(resp.body)
             group_gid = gsUtils.get_property_in_nodeinfo(new_group.group, "_gid")
@@ -614,8 +619,8 @@ class GsClient(WebSocketClientProtocol):
     def start_login(self):
         coro = self.loop.create_connection(self.factory, self.ip, self.port)
         self.loop.run_until_complete(coro)
-        self.connnection_done = asyncio.Future()
-        connected = self.loop.run_until_complete(self.connnection_done)
+        self.connection_fut = asyncio.Future()
+        connected = self.loop.run_until_complete(self.connection_fut)
         print("Start login!")
         if connected:
             self.send_hello()
@@ -623,11 +628,31 @@ class GsClient(WebSocketClientProtocol):
         else:
             return False
 
+    def doClose(self, timeout_sec = 5):
+        if not self.closed:
+            self.sendClose(1000)
+            fut = asyncio.Future()
+            self.connection_fut = fut
+            try:
+                self.loop.run_until_complete(asyncio.wait_for(fut, timeout_sec, loop=self.loop))
+            except asyncio.TimeoutError:
+                pass
+            self.closed = True
+
+    def test_connection_and_reconnect_if_necessary(self):
+        if not self.closed:
+            self.wait_push_msg(0)
+        if self.closed:
+            return self.start_login()
+
     def getReqNo(self):
         self.req_no = self.req_no + 1
         return self.req_no
 
     def sendReq(self, req_data, req_no):
+        if self.closed:
+            raise Exception("Connection closed")
+            # print("Connection closed!")
         future = asyncio.Future()
 
         self.req_map[req_no] = future
@@ -639,7 +664,7 @@ class GsClient(WebSocketClientProtocol):
         try:
             self.loop.run_until_complete(asyncio.wait_for(ft, timeout_sec, loop=self.loop))
         except asyncio.TimeoutError as to:
-            return None
+            raise None
         except DisconEvent as ev:
             return None
         return ft.result()
@@ -682,8 +707,8 @@ class GsClient(WebSocketClientProtocol):
     def onOpen(self):
         print("On opened")
         self.closed = False
-        self.connnection_done.set_result(True)
-        self.connnection_done = None
+        self.connection_fut.set_result(True)
+        self.connection_fut = None
 
 
     def query_log(self, filter):
@@ -726,10 +751,10 @@ class GsClient(WebSocketClientProtocol):
 
     def onClose(self, wasClean, code, reason):
         self.closed = True
-        print("Connection closed!")
-        if self.connnection_done is not None:
-            self.connnection_done.set_result(False)
-            self.connnection_done = None
+        print("Connection closed! wasClean="+str(wasClean))
+        if self.connection_fut is not None:
+            self.connection_fut.set_result(False)
+            self.connection_fut = None
         dis_event = DisconEvent(wasClean, code, reason)
         if self.push_future is not None:
             self.push_future.set_exception(dis_event)
