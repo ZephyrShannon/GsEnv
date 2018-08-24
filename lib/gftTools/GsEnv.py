@@ -7,6 +7,7 @@ from lib.gftTools.proto.requests_pb2 import EfuRequest, Request
 import pandas as pd
 
 from lib.gftTools.proto.responses_pb2 import Message2Client
+from lib.gftTools.proto.responses_pb2 import EfuResponse
 
 from lib.gftTools.proto import agentAndAction_pb2
 from lib.gftTools.proto import policyTree_pb2
@@ -23,6 +24,11 @@ import json
 
 import urllib
 import time
+import logging
+
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger(__name__)
+
 
 
 try:
@@ -61,7 +67,7 @@ def has_exception(efu_response):
     return efu_response.common.errorCode != 0 or efu_response.common.HasField("errorMessage")
 
 def print_response_exceptions(resp, message):
-    print("{0}, error:{1}, {2}".format(message, str(resp.common.errorCode),resp.common.errorMessage))
+    logger.exception("{0}, error:{1}, {2}".format(message, str(resp.common.errorCode),resp.common.errorMessage))
 
 
 def create_log_filter(start_id, limit, agent_link=None, group_gid=None, task_gid=None):
@@ -143,7 +149,7 @@ class GsEnv:
     def openTask(self, task_gid:str):
         update = agentAndAction_pb2.UpdateVarAndSaveLog()
         if (self.cur_agent_link is None):
-            print("Join group first!")
+            logger.info("Join group first!")
             return
         update.agentLink = self.cur_agent_link
         update.forTaskGid = task_gid
@@ -153,15 +159,14 @@ class GsEnv:
         one_val.gid = task_gid
         resp = self.client.send_req(MT_AGENT_ACTIONS, ST_UPDATE_VARIABLE_AND_SAVE_LOG, update.SerializeToString(), 3000)
         if has_exception(resp):
-            print("Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
-            print("Open task failed!")
+            logger.exception("Open task failed. Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
         else:
-            print("Task[{0}] opened, svt and policy will received later".format(task_gid))
+            logger.info("Task[{0}] opened, svt and policy will received later".format(task_gid))
         return resp
 
     def get_policy(self, task_gid, reload):
         if self.cur_agent_link is None:
-            print("Join group first!")
+            logger.error("Join group first!")
             return
         req = policyTree_pb2.OpenPolicyTreeRequest()
         req.taskInstGid = task_gid
@@ -170,21 +175,21 @@ class GsEnv:
         req.getBuilderUI = False
         resp = self.client.send_req(MT_AGENT_ACTIONS, GET_POLICY_TREE, req.SerializeToString(), 15000)
         if has_exception(resp):
-            print("Get policy of task[{0}] failed".format(task_gid))
+            logger.exception("Get policy of task[{0}] failed".format(task_gid))
             return None
         else:
-            print("Policy get!")
+            logger.info("Policy get!")
             resp_policy = policyTree_pb2.OpenPolicyTreeResponse()
             resp_policy.ParseFromString(resp.body)
             return resp_policy
 
     def message_loop(self, timeout_sec=10):
-        print("Start waiting")
+        logger.info("Start waiting")
         push_msg = self.wait_push_msg(timeout_sec)
         if push_msg is None:
-            print("Time out and returned.")
+            logger.exception("Time out and returned.")
         elif isinstance(push_msg, DisconEvent):
-            print("Find disconnect, code:" + str(push_msg.code) + ", reason:" + str(push_msg.reason))
+            logger.exception("Find disconnect, code:" + str(push_msg.code) + ", reason:" + str(push_msg.reason))
         else:
             self.apply_push_msg(push_msg)
 
@@ -226,7 +231,6 @@ class GsEnv:
     def view_data(self, gid, time_begin, time_end, write2file, calc_server_gid, timeout_sec):
         if isinstance(time_begin, str):
             time_begin = pd.Timestamp(time_begin)
-        print(str(type(time_begin)))
         if isinstance(time_end, str):
             time_end = pd.Timestamp(time_end)
         req = view_data.create_view_data_req(gid, time_begin, time_end, write2file, calc_server_gid)
@@ -289,7 +293,7 @@ def get_max_timestamp_and_dataframe_with_for_loop(tab:hbaseTable_pb2.HBaseTable)
             all_cols[idx].append(v)
             idx += 1
     for_loop_end = time.time()
-    print("For loop takes:" + str(for_loop_end - start))
+    logger.debug("For loop takes:" + str(for_loop_end - start))
     d = dict()
     idx = 0
     for name in tab.meta.column_names:
@@ -304,7 +308,7 @@ def get_max_timestamp_and_dataframe_with_for_loop(tab:hbaseTable_pb2.HBaseTable)
     df.last_update_ts = tab.meta.updateTimestamp
 
     df_end = time.time()
-    print("For loop takes:" + str(df_end - for_loop_end))
+    logger.debug("For loop takes:" + str(df_end - for_loop_end))
     return df
 
 
@@ -333,7 +337,7 @@ def get_max_timestamp_and_dataframe(tab:hbaseTable_pb2.HBaseTable):
     [aggr.add_one_row(row) for row in tab.rows]
 
     for_loop_end = time.time()
-    print("For loop takes:" + str(for_loop_end - start))
+    logger.debug("For loop takes:" + str(for_loop_end - start))
 
     d = dict()
     idx = 0
@@ -415,7 +419,7 @@ class GsClient(WebSocketClientProtocol):
     def update_qcoin(self, trans):
         if trans.HasField("userId"):
             if trans.userId != self.user_id:
-                print("Get update of other user:[" + trans.userId + "]")
+                logger.info("Get update of other user:[" + trans.userId + "]")
                 return
         self.qcoin = trans.qCoinNow
 
@@ -474,7 +478,7 @@ class GsClient(WebSocketClientProtocol):
         if isinstance(end_date, datetime.datetime):
             end_date = int(end_date.timestamp() * 1000)
         req_json = get_table_from_hbase_req_json(table_gid, start_date, end_date)
-        print("send request json:"+ req_json)
+        logger.debug("send request json:"+ req_json)
         resp = self.send_req(MT_DATA_VISUALIZATION, ST_GET_ORIG_J_FROM_HBASE, req_json, 100)
         if has_exception(resp):
             print_response_exceptions(resp, "Get table from hbase failed,")
@@ -483,7 +487,7 @@ class GsClient(WebSocketClientProtocol):
             table = hbaseTable_pb2.HBaseTable()
             start = time.time()
             table.ParseFromString(resp.body)
-            print("parse protobuf cost:" + str(time.time() - start))
+            logger.debug("parse protobuf cost:" + str(time.time() - start))
             return table
 
 
@@ -505,7 +509,7 @@ class GsClient(WebSocketClientProtocol):
             try:
                 mtime = gsUtils.str2datetime(mtime_str)
             except ValueError as e:
-                print(str(e))
+                logger.exception(str(e))
                 mtime = None
         else:
             mtime = None
@@ -521,7 +525,7 @@ class GsClient(WebSocketClientProtocol):
             if (ret is not None):
                 self.node_caches.__setitem__(node_gid, ret)
             else:
-                print("Can not find node:" + node_gid)
+                logger.exception("Can not find node:" + node_gid)
                 return None
         return ret[1]
 
@@ -586,7 +590,7 @@ class GsClient(WebSocketClientProtocol):
     '''
 
     def join_group_as_agent_service(self, group_gid=None, agent_link_gid=None):
-        print("Join group now!")
+        logger.info("Join group now!")
         if (group_gid is None):
             for group, agent_service in self.group_agent_service_list:
                 group_gid = gsUtils.get_property_in_nodeinfo(group, '_gid')
@@ -606,14 +610,14 @@ class GsClient(WebSocketClientProtocol):
             new_group.ParseFromString(resp.body)
             group_gid = gsUtils.get_property_in_nodeinfo(new_group.group, "_gid")
             agent_service_gid = gsUtils.get_property_in_nodeinfo(new_group.myAgentLink.agentLink, "_gid")
-            print("Group:" + gsUtils.get_property_in_nodeinfo(new_group.group, "_name") + "joined:")
+            logger.info("Group:" + gsUtils.get_property_in_nodeinfo(new_group.group, "_name") + "joined:")
             self.joined_group_and_agent_service.append((new_group.group, new_group.myAgentLink.agentLink))
 
             if new_group.HasField('groupSvt'):
                 self.update_state_var(new_group.svt.columns)
             return new_group
         else:
-            print("Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
+            logger.exception("Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
         return None
 
     def start_login(self):
@@ -621,7 +625,7 @@ class GsClient(WebSocketClientProtocol):
         self.loop.run_until_complete(coro)
         self.connection_fut = asyncio.Future()
         connected = self.loop.run_until_complete(self.connection_fut)
-        print("Start login!")
+        logger.info("Start login!")
         if connected:
             self.send_hello()
             return True
@@ -652,7 +656,6 @@ class GsClient(WebSocketClientProtocol):
     def sendReq(self, req_data, req_no):
         if self.closed:
             raise Exception("Connection closed")
-            # print("Connection closed!")
         future = asyncio.Future()
 
         self.req_map[req_no] = future
@@ -664,25 +667,29 @@ class GsClient(WebSocketClientProtocol):
         try:
             self.loop.run_until_complete(asyncio.wait_for(ft, timeout_sec, loop=self.loop))
         except asyncio.TimeoutError as to:
-            raise None
+            resp = Message2Client()
+            resp.efuResponse.common.errorCode = 408 #
+            resp.efuResponse.common.errorMessage = "Wait response timeout!"
+            return resp
         except DisconEvent as ev:
-            return None
+            resp = Message2Client()
+            resp.efuResponse.common.errorCode = 404  #
+            resp.efuResponse.common.errorMessage = "Connection lost!"
+            return resp
         return ft.result()
 
     def send_hello(self):
-        print("Login sent")
+        logger.info("Login sent")
         login = requests_pb2.Request()
         login.loginRequest.user = self.user
         login.loginRequest.datetime = str(datetime.datetime.now())
         self.init_common(login.loginRequest.common)
         login.loginRequest.password = getEncryptedPwd(login.loginRequest.datetime, self.pwd)
         resp = self.sync_send_req(login.SerializeToString(), login.loginRequest.common.requestNo, 30)
-        # resp = await self.sendReq(login.SerializeToString(), login.loginRequest.common.requestNo)
-        print("Message send!")
+
         self.onLoginResp(resp)
 
     def onLoginResp(self, login_resp):
-        print("Resp common:" + str(login_resp.common))
         if login_resp.common.errorCode == 0:
             self.user_id = login_resp.userId
             self.token = login_resp.token
@@ -699,13 +706,12 @@ class GsClient(WebSocketClientProtocol):
             for group in login_resp.groups:
                 self.group_agent_service_list.append(group)
 
-            print("Login success")
+            logger.info("Login success")
         else:
             self.sendClose(0, "Pwd incorrect.")
-            print("Login failed")
+            logger.error("Login failed")
 
     def onOpen(self):
-        print("On opened")
         self.closed = False
         self.connection_fut.set_result(True)
         self.connection_fut = None
@@ -719,7 +725,7 @@ class GsClient(WebSocketClientProtocol):
             logs.ParseFromString(resp.body)
             return logs.actions
         else:
-            print("Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
+            logger.exception("Exception[" + str(resp.common.errorCode) + "]:" + resp.common.errorMessage)
         return None
 
 
@@ -737,7 +743,7 @@ class GsClient(WebSocketClientProtocol):
                     future.set_result(resp.loginResponse)
                 return
             elif resp.HasField("efuResponse"):
-                print("Get resp of:" + str(resp.efuResponse.common.requestNo) + "len:" + str(
+                logger.info("Get resp of:" + str(resp.efuResponse.common.requestNo) + "len:" + str(
                     len(payload)) + " type:" + str(resp.efuResponse.mainRequestNo) + ":" + str(
                     resp.efuResponse.subRequestNo))
                 future = self.req_map.pop(resp.efuResponse.common.requestNo, None)
@@ -747,14 +753,25 @@ class GsClient(WebSocketClientProtocol):
             else:
                 return self.on_push_msg(resp)
         else:
-            print("Text message received: {0}".format(payload.decode('utf8')))
+            logger.exception("Text message received: {0}".format(payload.decode('utf8')))
 
     def onClose(self, wasClean, code, reason):
         self.closed = True
-        print("Connection closed! wasClean="+str(wasClean))
+        logger.debug("Connection closed! wasClean="+str(wasClean))
         if self.connection_fut is not None:
-            self.connection_fut.set_result(False)
-            self.connection_fut = None
+            if not self.connection_fut.done():
+                self.connection_fut.set_result(False)
+                self.connection_fut = None
+            else:
+                if self.connection_fut.cancelled():
+                    logger.debug("Connection fut not running, is canceled")
+                else:
+                    exp = self.connection_fut.exception()
+                    if exp is not None:
+                        logger.debug("Exception:" + str(exp))
+                    else:
+                        result = self.connection_fut.result()
+                        logger.debug("Result is :"+ str(result))
         dis_event = DisconEvent(wasClean, code, reason)
         if self.push_future is not None:
             self.push_future.set_exception(dis_event)

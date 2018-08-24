@@ -9,12 +9,7 @@ import pandas as pd
 def resample_and_fillna(data,freq = None,lookback = None):
     if lookback is not None and (lookback < 0):
         lookback = None # -1 means None  # 0 mean no fillna
-    if isinstance(data, gftIO.GftTable):
-        if data.columnTab is not None:
-            return resample_and_fill_na_col_tab(data.columnTab, freq, lookback)
-        else:
-            return resample_and_fill_na_matrix(data.matrix, freq, lookback)
-    elif isinstance(data, pd.DataFrame):
+    if isinstance(data, pd.DataFrame):
         if gftIO.ismatrix(data):
             return resample_and_fill_na_matrix(data, freq, lookback)
         else:
@@ -104,9 +99,6 @@ def get_freq_index(freq):
     elif isinstance(freq, pd.DataFrame):
         if gftIO.ismatrix(freq):
             return freq.index
-    elif isinstance(freq, gftIO.GftTable):
-        if freq.matrix is not None:
-            return freq.matrix.index
     raise Exception("Can not accept freq of type:" + str(type(freq)))
 
 

@@ -145,8 +145,8 @@ def convertColumnTabl2Matrix(columnTab):
     if oName is None:
         try:
             unique = columnTab.set_index(keys=tName, verify_integrity=True)
-            unique.columns = np.chararray(
-                1, itemsize=16, buffer='\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0')
+            # unique.columns = np.chararray(
+            #     1, itemsize=16, buffer='\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0\0')
             return unique
         except Exception:
             raise Exception("Can not transform TV to matrix, T is not unique")
