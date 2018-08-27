@@ -1058,12 +1058,20 @@ def intTuple2Str(tup2Int):
 
 
 def binary_to_str(bs):
+    # print("bs is:" + str(bs) + " len:" + str(len(bs)))
     str1 = int.to_bytes(int.from_bytes(bs[:8], byteorder='little'), 8,
                         'big').hex().upper()
     str2 = int.to_bytes(int.from_bytes(bs[8:], byteorder='little'), 8,
                         'big').hex().upper()
     return str1 + str2
 
+def np_bin_array_cell_to_str(cell):
+    bs = cell[0]
+    str1 = int.to_bytes(int.from_bytes(bs[:8], byteorder='little'), 8,
+                        'big').hex().upper()
+    str2 = int.to_bytes(int.from_bytes(bs[8:], byteorder='little'), 8,
+                        'big').hex().upper()
+    return str1 + str2
 
 def gid_str_to_bin(str):
     b1 = int.to_bytes(
@@ -1076,23 +1084,14 @@ def gid_str_to_bin(str):
 
 
 def bin_o_set_2_str(binary_gids):
-    '''
-    Do not use this, use oSet2Hex belong, that one is much much faster
-    use this one in python3.5, bcs oSet2Hex will crash with problem that I can not fix...
-    :param binary_gids:  columns of pd.DataFrame
-    :return: 
-    '''
-    str_gid_list = list()
-    for bin_gid in binary_gids:
-        str_gid_list.append(binary_to_str(bin_gid))
-    return str_gid_list
+    return np.apply_along_axis(np_bin_array_cell_to_str, 1, binary_gids.values.reshape(-1, 1))
 
 def oSet2Hex(oSet):
     """
     convert array to 32 bit hex array
     """
-    ret = oSet.astype(oDataType)
-    return np.apply_along_axis(intTuple2Str, 1, ret.values.reshape(-1, 1))
+    return np.apply_along_axis(np_bin_array_cell_to_str, 1, oSet.values.reshape(-1, 1))
+
 
 
 def get_primary_t_name_with_def(data, pt_name):
