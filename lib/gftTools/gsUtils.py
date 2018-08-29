@@ -1041,3 +1041,49 @@ def find_prop(prop_container, key, def_val = None):
         if entry.key == key:
             return entry.value
     return def_val
+
+
+from sqlalchemy import create_engine
+import pandas as pd
+import logging
+import os
+
+
+def create_engin(con_str='mysql+mysqlconnector://datatec:0.618@[172.16.103.103]:3306/JYDB'):
+    return create_engine(con_str, echo=False)
+
+# begin_end_t is a tuple of (datetime,datetime), t_values is a list of datetime. set only one of them
+def read_RMDB_table(engine, db_name, table_name, tbl_columns, t_filter_col_name, begin_end_t=None, t_values=None):
+    if isinstance(begin_end_t, tuple):
+        begin_t = begin_end_t[0].date().strftime('%Y-%m-%d"')
+        end_t = begin_end_t[1].date().strftime('%Y-%m-%d"')
+        sql_syntax = '''SELECT {0} FROM {1}.{2} where {3}>='{4}' and {3}<='{5}' limit 99999999999;'''.format(
+            tbl_columns, db_name, table_name, t_filter_col_name, begin_t, end_t)
+    else:
+        date = [x.date().strftime("%Y-%m-%d") for x in t_values[-400:]]
+        sql_syntax = '''SELECT %s FROM %s.%s where %s in %s limit 99999999999;''' % (
+        tbl_columns, db_name, table_name, t_filter_col_name, str(tuple(date)))
+    df_table = pd.read_sql(sql_syntax, engine)
+    return df_table
+
+
+def read_dataframe_from_sql_sample():
+    import datetime
+    begin_t = datetime.datetime(2010, 12, 3)
+    end_t = datetime.datetime(2011, 12, 4)
+
+    begin_end_t = (begin_t, end_t)
+
+    data_list = list()
+    for i in range(365):
+        data_list.append(begin_t)
+        begin_t += datetime.timedelta(days=1)
+    eng = create_engin()
+    for i in range(5):
+        t_begin = datetime.datetime.now()
+        read_RMDB_table(eng, 'JYDB', 'MF_NetValue', 'InnerCode,InfoPUblDate,UnitNV', 'InfoPUblDate', None, data_list)
+        t_end_1 = datetime.datetime.now()
+        print("get row in time list, cost:" + str(t_end_1 - t_begin))
+        read_RMDB_table(eng, 'JYDB', 'MF_NetValue', 'InnerCode,InfoPUblDate,UnitNV', 'InfoPUblDate', (begin_t, end_t))
+        t_end_2 = datetime.datetime.now()
+        print("get row in time range:" + str(t_end_2 - t_end_1))
