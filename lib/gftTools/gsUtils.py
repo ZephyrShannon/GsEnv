@@ -1060,7 +1060,7 @@ def read_RMDB_table(engine, db_name, table_name, tbl_columns, t_filter_col_name,
         sql_syntax = '''SELECT {0} FROM {1}.{2} where {3}>='{4}' and {3}<='{5}' limit 99999999999;'''.format(
             tbl_columns, db_name, table_name, t_filter_col_name, begin_t, end_t)
     else:
-        date = [x.date().strftime("%Y-%m-%d") for x in t_values[-400:]]
+        date = [x.date().strftime("%Y-%m-%d") for x in t_values]
         sql_syntax = '''SELECT %s FROM %s.%s where %s in %s limit 99999999999;''' % (
         tbl_columns, db_name, table_name, t_filter_col_name, str(tuple(date)))
     df_table = pd.read_sql(sql_syntax, engine)
@@ -1074,10 +1074,8 @@ def read_dataframe_from_sql_sample():
 
     begin_end_t = (begin_t, end_t)
 
-    data_list = list()
-    for i in range(365):
-        data_list.append(begin_t)
-        begin_t += datetime.timedelta(days=1)
+    data_list = pd.date_range(begin_t, None, 365, 'B')
+
     eng = create_engin()
     for i in range(5):
         t_begin = datetime.datetime.now()
